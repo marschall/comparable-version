@@ -11,17 +11,18 @@ import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 class ComparableVersionTests {
 
-  static Stream<Function<String, ?>> parameters() {
+  static Stream<Function<String, ?>> parsers() {
     return Stream.of(org.apache.maven.artifact.versioning.ComparableVersion::new, ComparableVersion::new);
   }
 
   @ParameterizedTest
-  @MethodSource("parameters")
+  @MethodSource("parsers")
   <V extends Comparable<V>> void ignoreZeros(Function<String, V> parser) {
     V oneDotZero = parser.apply("1.0");
     V oneDotZeroDotZero = parser.apply("1.0.0");
@@ -38,7 +39,7 @@ class ComparableVersionTests {
   }
 
   @ParameterizedTest
-  @MethodSource("parameters")
+  @MethodSource("parsers")
   <V extends Comparable<V>> void preserveZeros(Function<String, V> parser) {
     V oneDotZero = parser.apply("1.0");
     V oneDotZeroDotZero = parser.apply("1.0.0");
@@ -50,7 +51,7 @@ class ComparableVersionTests {
   }
 
   @ParameterizedTest
-  @MethodSource("parameters")
+  @MethodSource("parsers")
   <V extends Comparable<V>> void compare(Function<String, V> parser) {
     List<String> unparsed = List.of("0.9", "0.9.1", "1.0", "1.0.1");
 
@@ -62,23 +63,27 @@ class ComparableVersionTests {
       for (int j = 0; j < i; j++) {
         V smallerVersion = versionsOrdered.get(j);
         assertThat(version, greaterThan(smallerVersion));
-      } 
+      }
 
       assertThat(version, comparesEqualTo(version));
 
       for (int j = i + 1; j < versionsOrdered.size(); j++) {
         V greaterVersion = versionsOrdered.get(j);
         assertThat(version, lessThan(greaterVersion));
-      } 
+      }
     }
   }
 
   @ParameterizedTest
-  @MethodSource("parameters")
+  @MethodSource("parsers")
   <V extends Comparable<V>> void compareUnsigned(Function<String, V> parser) {
     List<String> unparsed = List.of("0", "1", "126", "127", "128", "255");
 
-    List<V> versionsOrdered = unparsed.stream().map(parser::apply).collect(toList());
+    //formatter:off
+    List<V> versionsOrdered = unparsed.stream()
+                                      .map(parser::apply)
+                                      .collect(toList());
+    //formatter:on
 
     for (int i = 0; i < versionsOrdered.size(); i++) {
       V version = versionsOrdered.get(i);
@@ -86,15 +91,33 @@ class ComparableVersionTests {
       for (int j = 0; j < i; j++) {
         V smallerVersion = versionsOrdered.get(j);
         assertThat(version, greaterThan(smallerVersion));
-      } 
+      }
 
       assertThat(version, comparesEqualTo(version));
 
       for (int j = i + 1; j < versionsOrdered.size(); j++) {
         V greaterVersion = versionsOrdered.get(j);
         assertThat(version, lessThan(greaterVersion));
-      } 
+      }
     }
+  }
+
+  @ParameterizedTest
+  @MethodSource("parsers")
+  <V extends Comparable<V>> void patchVersions(Function<String, V> parser) {
+    V four = parser.apply("4.0.0");
+    V fourPatchOne = parser.apply("4.0.0-1");
+    V fourDotOne = parser.apply("4.0.1");
+
+    assertThat(four, lessThan(fourPatchOne));
+    assertThat(fourPatchOne, lessThan(fourDotOne));
+  }
+
+  @Test
+  void testHashCode() {
+    ComparableVersion version = new ComparableVersion("127.128.127-128");
+
+    assertEquals(4587779, version.hashCode());
   }
 
 }

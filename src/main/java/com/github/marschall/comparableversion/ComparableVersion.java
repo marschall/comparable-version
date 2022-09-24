@@ -1,9 +1,8 @@
 package com.github.marschall.comparableversion;
 
-import java.util.Arrays;
-
 /**
- * A version made up of integer components separated by {@code '.'}.
+ * A version made up of up to 3 integer components separated by {@code '.'} and an optional
+ * final one preceeded by {@code '-'}.
  * <p>
  * Trailing 0 elements will be ignored when comparing but retained for {@link #toString()}.
  */
@@ -11,62 +10,85 @@ public final class ComparableVersion implements Comparable<ComparableVersion> {
 
   private static final int MAX_VALUE = Byte.toUnsignedInt((byte) -1);
 
-  private final byte[] components;
+  private final byte major;
+  private final byte minor;
+  private final byte micro;
+  private final byte patch;
   private final String original;
 
   /**
-   * Constructs a new {@link ComparableVersion}
-   * 
-   * @param version the version string made up of positive integer components separated by {@code '.'},
+   * Constructs a new {@link ComparableVersion}.
+   *
+   * @param version the version string made up of up to 3 positive integer components separated by {@code '.'}
+   *                and an optional final one preceeded by {@code '-'},
    *                not {@code null},
    *                will be retained for {@link #toString()}
    */
   public ComparableVersion(String version) {
     this.original = version;
-    this.components = parse(version);
+
+    int end = version.indexOf('.');
+    if (end == -1) {
+      this.major = parseByte(version, 0, version.length());
+      this.minor = 0;
+      this.micro = 0;
+      this.patch = 0;
+    } else {
+      this.major = parseByte(version, 0, end);
+      int start = end + 1;
+      end = version.indexOf('.', start);
+      if (end == -1) {
+        this.minor = parseByte(version, start, version.length());
+        this.micro = 0;
+        this.patch = 0;
+      } else {
+        this.minor = parseByte(version, start, end);
+        start = end + 1;
+        end = version.indexOf('.', start);
+        if (end != -1) {
+          throw new IllegalArgumentException("only three dots supported");
+        }
+        end = version.indexOf('-', start);
+        if (end == -1) {
+          this.micro = parseByte(version, start, version.length());
+          this.patch = 0;
+        } else {
+          this.micro = parseByte(version, start, end);
+          this.patch = parseByte(version, end + 1, version.length());
+        }
+      }
+    }
   }
 
-  private static byte[] parse(String version) {
-    String[] numbers = version.split("\\.");
-    byte[] components = new byte[numbers.length];
-    int lastNonZero = -1;
-    for (int i = 0; i < components.length; i++) {
-      int intValue = Integer.parseInt(numbers[i]);
-      if (intValue < 0) {
-        throw new IllegalArgumentException("negative numbers not supported");
-      }
-      if (intValue > MAX_VALUE) {
-        throw new IllegalArgumentException("version component too large");
-      }
-      components[i] = (byte) intValue;
-      if (intValue != 0) {
-        lastNonZero = i;
-      }
+  private static byte parseByte(String s, int beginIndex, int endIndex) {
+    return toByte(Integer.parseInt(s, beginIndex, endIndex, 10));
+  }
+
+  private static byte toByte(int i) {
+    if (i < 0) {
+      throw new IllegalArgumentException("negative numbers not supported");
     }
-    if (lastNonZero == -1) {
-      return new byte[0];
-    } else if (lastNonZero != components.length -1) {
-      byte[] canonical = new byte[lastNonZero + 1];
-      System.arraycopy(components, 0, canonical, 0, lastNonZero + 1);
-      return canonical;
-    } else {
-      return components;
+    if (i > MAX_VALUE) {
+      throw new IllegalArgumentException("version component too large");
     }
+    return (byte) i;
   }
 
   @Override
   public int compareTo(ComparableVersion o) {
-    if (this.components.length == o.components.length) {
-      return Arrays.compareUnsigned(this.components, o.components);
-    } else {
-      int prefixLength = Math.min(this.components.length, o.components.length);
-      int prefixCompare = Arrays.compareUnsigned(this.components, 0, prefixLength, o.components, 0, prefixLength);
-      if (prefixCompare != 0) {
-        return prefixCompare;
-      } else {
-        return Integer.compare(this.components.length, o.components.length);
-      }
+    int result = Byte.compareUnsigned(this.major, o.major);
+    if (result != 0) {
+      return result;
     }
+    result = Byte.compareUnsigned(this.minor, o.minor);
+    if (result != 0) {
+      return result;
+    }
+    result = Byte.compareUnsigned(this.micro, o.micro);
+    if (result != 0) {
+      return result;
+    }
+    return Byte.compareUnsigned(this.patch, o.patch);
   }
 
   @Override
@@ -78,12 +100,15 @@ public final class ComparableVersion implements Comparable<ComparableVersion> {
       return false;
     }
     ComparableVersion other = (ComparableVersion) obj;
-    return Arrays.equals(this.components, other.components);
+    return (this.major == other.major)
+            && (this.minor == other.minor)
+            && (this.micro == other.micro)
+            && (this.patch == other.patch);
   }
 
   @Override
   public int hashCode() {
-    return Arrays.hashCode(this.components);
+    return ((((((31 + this.major) * 31) + this.minor) * 31) + this.micro) * 31) + this.patch;
   }
 
   @Override
